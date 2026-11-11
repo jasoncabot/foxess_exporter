@@ -67,3 +67,19 @@ increase(foxess_solar_energy_kwh_total[1d])
 
 - The inverter rejects reads that span unmapped registers, so the exporter reads several small blocks instead of one large one.
 - `foxess_bms_energy_remaining_kwh` uses a ×0.001 scale. That's inferred from SoC and not yet confirmed.
+
+## Grafana dashboard
+
+`dashboards/foxess.json` is a ready-made dashboard. To add it, go to **Dashboards → New → Import**, upload the file, and pick your Prometheus data source. It uses only built-in panels. The animated power-flow diagram is a Canvas panel and was tested on Grafana 12.1.
+
+From top to bottom:
+
+1. **Right now:** a live power-flow diagram (solar, grid, battery and home around the inverter), battery level, and system status.
+2. **Today:** energy made, used, bought and sold; self-powered % and solar kept %; money saved; power and battery charts.
+3. **Last 30 days:** daily solar, and each day's home energy split by where it came from.
+4. **This month** and **since installation:** totals, self-powered %, CO₂ avoided, and money saved.
+5. **Battery detail:** charge and discharge, temperatures, health, round-trip efficiency, and what the battery has earned.
+6. **Solar panels:** power, voltage and current for each string.
+7. **Inverter & grid health** (collapsed): grid voltage and frequency, temperatures, firmware, work mode, and faults.
+
+Set your tariff and grid carbon intensity in the variables at the top. `dashboards/build_dashboard.py` generates the JSON, so edit that and re-run it rather than editing the JSON by hand.
