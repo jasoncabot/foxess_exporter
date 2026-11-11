@@ -1336,7 +1336,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "1 - foxess_inverter_state{state=\"fault\"}",
+          "expr": "1 - clamp_max(sum(foxess_inverter_state{state=\"fault\"}) + sum(foxess_alarm), 1)",
           "legendFormat": "Faults",
           "refId": "C",
           "range": false,
@@ -3744,16 +3744,16 @@
     },
     {
       "type": "stat",
-      "title": "Energy remaining",
-      "description": "Energy left in the battery, per the BMS.",
+      "title": "Stored now",
+      "description": "Energy in the battery right now (capacity × charge level).",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "foxess_bms_energy_remaining_kwh",
-          "legendFormat": "Energy remaining",
+          "expr": "foxess_battery_stored_kwh",
+          "legendFormat": "Stored now",
           "refId": "A",
           "range": true,
           "instant": false
@@ -3802,6 +3802,73 @@
         "h": 4,
         "w": 4,
         "x": 4,
+        "y": 58
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Capacity",
+      "description": "How much the battery holds when full. Falls slowly as it ages.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "foxess_battery_capacity_kwh",
+          "legendFormat": "Capacity",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#199e70"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#199e70",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "noValue": "—",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "showPercentChange": false,
+        "wideLayout": true
+      },
+      "id": 39,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
         "y": 58
       },
       "datasource": {
@@ -3864,11 +3931,11 @@
         "showPercentChange": false,
         "wideLayout": true
       },
-      "id": 39,
+      "id": 40,
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 8,
+        "x": 12,
         "y": 58
       },
       "datasource": {
@@ -3931,73 +3998,6 @@
         "showPercentChange": false,
         "wideLayout": true
       },
-      "id": 40,
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 12,
-        "y": 58
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Max charge rate",
-      "description": "Current the BMS will currently accept.",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "foxess_bms_charge_limit_amps",
-          "legendFormat": "Max charge rate",
-          "refId": "A",
-          "range": true,
-          "instant": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "amp",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#199e70"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#199e70",
-                "value": null
-              }
-            ]
-          },
-          "mappings": [],
-          "noValue": "—",
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "textMode": "value",
-        "orientation": "auto",
-        "showPercentChange": false,
-        "wideLayout": true
-      },
       "id": 41,
       "gridPos": {
         "h": 4,
@@ -4012,24 +4012,35 @@
     },
     {
       "type": "stat",
-      "title": "Max discharge rate",
-      "description": "Current the BMS will currently supply.",
+      "title": "Cell voltage",
+      "description": "Highest and lowest cell voltage (0.1 V resolution). A widening gap between them means the cells are drifting out of balance.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "foxess_bms_discharge_limit_amps",
-          "legendFormat": "Max discharge rate",
+          "expr": "foxess_bms_cell_voltage_volts{bound=\"high\"}",
+          "legendFormat": "Highest",
           "refId": "A",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "foxess_bms_cell_voltage_volts{bound=\"low\"}",
+          "legendFormat": "Lowest",
+          "refId": "B",
           "range": true,
           "instant": false
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "amp",
+          "unit": "volt",
           "color": {
             "mode": "fixed",
             "fixedColor": "#199e70"
@@ -4058,12 +4069,15 @@
           "values": false
         },
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "value",
+        "textMode": "value_and_name",
         "orientation": "auto",
         "showPercentChange": false,
-        "wideLayout": true
+        "wideLayout": true,
+        "text": {
+          "valueSize": 20
+        }
       },
       "id": 42,
       "gridPos": {
@@ -4434,7 +4448,7 @@
     },
     {
       "type": "row",
-      "id": 57,
+      "id": 62,
       "title": "⚙️  Inverter & grid health",
       "collapsed": true,
       "gridPos": {
@@ -5456,6 +5470,478 @@
             "w": 12,
             "x": 12,
             "y": 84
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Active alarms",
+          "description": "Named inverter alarms from the Fox protocol.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_alarm == 1",
+              "legendFormat": "{{alarm}}",
+              "refId": "A",
+              "range": false,
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#3d9a50"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#d64545",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "Active",
+                      "color": "#d64545",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "noValue": "All clear"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "value_and_name",
+            "orientation": "auto",
+            "showPercentChange": false,
+            "wideLayout": true,
+            "text": {
+              "valueSize": 16
+            }
+          },
+          "id": 57,
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 0,
+            "y": 92
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Battery",
+          "description": "Battery modules and rated capacity.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_battery_modules",
+              "legendFormat": "Modules",
+              "refId": "A",
+              "range": false,
+              "instant": true
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_battery_design_capacity_kwh",
+              "legendFormat": "Design capacity (kWh)",
+              "refId": "B",
+              "range": false,
+              "instant": true
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_battery_capacity_amp_hours",
+              "legendFormat": "Capacity (Ah)",
+              "refId": "C",
+              "range": false,
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#199e70"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#199e70",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "noValue": "—"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "value_and_name",
+            "orientation": "auto",
+            "showPercentChange": false,
+            "wideLayout": true,
+            "text": {
+              "valueSize": 18
+            }
+          },
+          "id": 58,
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 92
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Grid limits",
+          "description": "Maximum power the inverter will export to, or import from, the grid.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_export_limit_watts",
+              "legendFormat": "Export",
+              "refId": "A",
+              "range": false,
+              "instant": true
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_import_limit_watts",
+              "legendFormat": "Import",
+              "refId": "B",
+              "range": false,
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "#8f8e86"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#8f8e86",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "noValue": "—",
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "value_and_name",
+            "orientation": "auto",
+            "showPercentChange": false,
+            "wideLayout": true,
+            "text": {
+              "valueSize": 18
+            }
+          },
+          "id": 59,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 12,
+            "y": 92
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Forced grid charging",
+          "description": "Time slots when the inverter charges the battery from the grid (e.g. on a cheap overnight tariff).",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_charge_period_enabled",
+              "legendFormat": "Slot {{period}}: {{start}}–{{end}}",
+              "refId": "A",
+              "range": false,
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Off",
+                      "color": "#3d9a50",
+                      "index": 0
+                    },
+                    "1": {
+                      "text": "On",
+                      "color": "#e0a100",
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              "noValue": "—"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "value_and_name",
+            "orientation": "auto",
+            "showPercentChange": false,
+            "wideLayout": true,
+            "text": {
+              "valueSize": 16
+            }
+          },
+          "id": 60,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 16,
+            "y": 92
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Control",
+          "description": "Whether something external is controlling the inverter, and whether the grid meter is connected.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_remote_control_enabled",
+              "legendFormat": "Remote control",
+              "refId": "A",
+              "range": false,
+              "instant": true
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "foxess_meter_connected{meter=\"1\"}",
+              "legendFormat": "Grid meter",
+              "refId": "B",
+              "range": false,
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "noValue": "—"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Remote control"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "1": {
+                            "text": "On",
+                            "color": "#e0a100",
+                            "index": 0
+                          },
+                          "0": {
+                            "text": "Off",
+                            "color": "#3d9a50",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Grid meter"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "1": {
+                            "text": "Connected",
+                            "color": "#3d9a50",
+                            "index": 0
+                          },
+                          "0": {
+                            "text": "Missing",
+                            "color": "#d64545",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "value_and_name",
+            "orientation": "auto",
+            "showPercentChange": false,
+            "wideLayout": true,
+            "text": {
+              "valueSize": 16
+            }
+          },
+          "id": 61,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 20,
+            "y": 92
           },
           "datasource": {
             "type": "prometheus",

@@ -26,10 +26,27 @@ LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "9877"))
 TIMEOUT = 5
 
 # Contiguous holding-register blocks to read each scrape: (start, count).
-# Kept small because the inverter rejects reads spanning unmapped registers.
-BLOCKS = [(30000, 16), (31000, 27), (32000, 24), (36001, 3), (37609, 4),
-          (37617, 2), (37624, 1), (37632, 1), (39063, 3), (39067, 3),
-          (39070, 4), (39279, 4), (41000, 1), (41009, 3)]
+# Kept small because the inverter silently ignores (and so times out on) reads that touch any unsupported
+# register. The 41xxx settings are read one at a time: block reads there are unreliable on the H1 G2.
+#
+# The logger answers most reads in ~20 ms but sometimes takes a second or more, so registers that rarely change
+# (identity, ratings, settings, battery capacity) are only re-read every SLOW_INTERVAL seconds.
+FAST_BLOCKS = [(31000, 30), (32000, 24), (37609, 12), (39063, 3), (39067, 3), (39070, 4), (39279, 4)]
+SLOW_BLOCKS = [(30000, 24), (36001, 3), (37003, 2), (37032, 10), (37624, 1), (37632, 4), (38801, 1),
+               (38901, 1), (39000, 1), (39053, 6), (44000, 1), (46501, 2)]
+SLOW_BLOCKS += [(a, 1) for a in (41000, 41001, 41002, 41003, 41004, 41005, 41006, 41009, 41010, 41011, 41012)]
+SLOW_INTERVAL = 300
+
+# Named bits of the alarm registers, from the FoxESS Modbus protocol V1.05.04.00, table 4-1.
+ALARMS = {
+    39067: {0: "Input string voltage high", 1: "DC arc fault", 2: "String reverse connection",
+            7: "Grid power outage", 8: "Abnormal grid voltage", 11: "Abnormal grid frequency",
+            14: "Output overcurrent", 15: "Output DC component too high"},
+    39068: {0: "Abnormal residual current", 1: "System grounding abnormal", 2: "Low insulation resistance",
+            3: "Temperature too high", 9: "Energy storage abnormal", 10: "Islanding",
+            14: "Off-grid output overload"},
+    39069: {3: "External fan abnormal", 9: "Meter lost", 10: "BMS lost"},
+}
 
 
 class ModbusClient:
@@ -96,6 +113,16 @@ def i32(hi, lo):
     return v - 0x100000000 if v & 0x80000000 else v
 
 
+def string(r, start, count):
+    raw = bytes(b for w in (r(start + i) for i in range(count)) for b in (w >> 8, w & 0xFF))
+    return raw.decode("ascii", "ignore").strip("\x00 ")
+
+
+def hhmm(v):
+    """Charge period times are stored as (hour << 8) | minute."""
+    return f"{v >> 8:02d}:{v & 0xFF:02d}"
+
+
 class Metrics:
     def __init__(self):
         self.lines = []
@@ -113,19 +140,32 @@ class Metrics:
         return "\n".join(self.lines) + "\n"
 
 
-def collect(client):
+_slow_cache = {"regs": {}, "read_at": 0.0}
+
+
+def read_blocks(client, blocks):
     regs = {}
-    for start, count in BLOCKS:
+    for start, count in blocks:
         for i, v in enumerate(client.read(start, count)):
             regs[start + i] = v
+    return regs
+
+
+def collect(client):
+    regs = read_blocks(client, FAST_BLOCKS)
+    if time.monotonic() - _slow_cache["read_at"] > SLOW_INTERVAL:
+        _slow_cache["regs"] = read_blocks(client, SLOW_BLOCKS)
+        _slow_cache["read_at"] = time.monotonic()
+    regs.update(_slow_cache["regs"])
 
     r = regs.__getitem__
     m = Metrics()
 
-    model = bytes(b for w in (r(30000 + i) for i in range(16)) for b in (w >> 8, w & 0xFF))
-    m.add("foxess_info", 1, "Inverter information", model=model.decode("ascii", "ignore").strip("\x00 "),
+    m.add("foxess_info", 1, "Inverter information", model=string(r, 30000, 16), serial=string(r, 30016, 8),
           master_version=f"{r(36001) / 100:.2f}", slave_version=f"{r(36002) / 100:.2f}",
-          manager_version=f"{r(36003) / 100:.2f}")
+          manager_version=f"{r(36003) / 100:.2f}", protocol_version=f"{r(39000) >> 8}.{r(39000) & 0xFF:02x}")
+    m.add("foxess_rated_power_watts", i32(r(39053), r(39054)), "Inverter rated power")
+    m.add("foxess_max_apparent_power_va", i32(r(39057), r(39058)), "Inverter maximum apparent power")
 
     # Solar
     for n, base in ((1, 39070), (2, 39072)):
@@ -157,6 +197,13 @@ def collect(client):
         m.add("foxess_inverter_state", 1 if on else 0, "Inverter state flags", state=state)
     for i in range(3):
         m.add("foxess_fault_code", r(39067 + i), "Raw fault bitmask registers", register=39067 + i)
+    for reg, bits in ALARMS.items():
+        for bit, name in bits.items():
+            m.add("foxess_alarm", (r(reg) >> bit) & 1, "Inverter alarm active (1) or clear (0)", alarm=name)
+    for n, reg in (("1", 38801), ("2", 38901)):
+        m.add("foxess_meter_connected", r(reg), "Whether the grid CT meter is connected", meter=n)
+    m.add("foxess_remote_control_enabled", r(44000) & 1,
+          "Whether remote control (external charge/discharge commands) is enabled")
 
     # Battery
     m.add("foxess_battery_soc_percent", r(31024), "Battery state of charge")
@@ -172,7 +219,21 @@ def collect(client):
     m.add("foxess_bms_cell_temperature_celsius", s16(r(37618)) * 0.1, "BMS cell temperature", bound="low")
     m.add("foxess_bms_charge_limit_amps", r(31025) * 0.1, "BMS max charge current")
     m.add("foxess_bms_discharge_limit_amps", r(31026) * 0.1, "BMS max discharge current")
-    m.add("foxess_bms_energy_remaining_kwh", r(37632) * 0.001, "BMS energy remaining")
+    m.add("foxess_bms_connect_state", r(31028), "BMS connection state (1 = connected)")
+    # The protocol documents these as mV, but this firmware reports 0.1 V steps.
+    m.add("foxess_bms_cell_voltage_volts", r(37619) * 0.1, "BMS cell voltage", bound="high")
+    m.add("foxess_bms_cell_voltage_volts", r(37620) * 0.1, "BMS cell voltage", bound="low")
+    # 37632 is "remain energy" in the protocol, but it reads the same as the design energy regardless of SoC,
+    # so it's the battery's current full capacity rather than what's stored.
+    capacity = r(37632) * 0.01
+    m.add("foxess_battery_capacity_kwh", capacity, "Battery usable capacity when full")
+    m.add("foxess_battery_design_capacity_kwh", r(37635) * 0.01, "Battery capacity when new")
+    m.add("foxess_battery_capacity_amp_hours", r(37633) * 0.1, "Battery full-charge capacity")
+    m.add("foxess_battery_stored_kwh", capacity * r(31024) / 100, "Energy currently stored (capacity x SoC)")
+    modules = r(37032)
+    m.add("foxess_battery_modules", modules, "Number of battery modules")
+    m.add("foxess_bms_info", 1, "Battery management system information", master_version=str(r(37003)),
+          type=str(r(37004)), module_versions=",".join(str(r(37033 + i)) for i in range(min(modules, 9))))
 
     # Energy counters (0.1 kWh resolution; "today" values reset at inverter midnight)
     for name, total, today, help_ in (
@@ -194,6 +255,11 @@ def collect(client):
     m.add("foxess_min_soc_percent", r(41009), "Minimum SoC")
     m.add("foxess_max_soc_percent", r(41010), "Maximum SoC")
     m.add("foxess_min_soc_on_grid_percent", r(41011), "Minimum SoC on grid")
+    m.add("foxess_export_limit_watts", r(41012), "Grid export limit")
+    m.add("foxess_import_limit_watts", i32(r(46501), r(46502)), "Grid import limit")
+    for n, base in (("1", 41001), ("2", 41004)):
+        m.add("foxess_charge_period_enabled", r(base), "Forced grid-charge time period enabled",
+              period=n, start=hhmm(r(base + 1)), end=hhmm(r(base + 2)))
     return m
 
 

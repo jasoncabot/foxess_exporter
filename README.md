@@ -54,6 +54,12 @@ Add the scrape job to Prometheus (see `prometheus-scrape.yaml`):
 | `foxess_<x>_energy_kwh_total` | Lifetime counters for solar, battery charge/discharge, grid import/export, load, input and output (0.1 kWh resolution) |
 | `foxess_<x>_energy_today_kwh` | Today's totals; reset at the inverter's midnight |
 | `foxess_work_mode`, `foxess_{min,max}_soc_percent` | Current settings |
+| `foxess_alarm{alarm}` | Named alarms from the Fox protocol: grid outage, over-temperature, insulation, meter or BMS lost, and so on |
+| `foxess_battery_{capacity,design_capacity,stored}_kwh`, `foxess_battery_modules` | Battery size, energy stored now, and module count |
+| `foxess_bms_cell_voltage_volts{bound}` | Highest and lowest cell voltage (0.1 V resolution) |
+| `foxess_charge_period_enabled{period,start,end}` | Forced grid-charge time slots |
+| `foxess_{export,import}_limit_watts`, `foxess_remote_control_enabled`, `foxess_meter_connected{meter}` | Grid limits, remote control and meter status |
+| `foxess_rated_power_watts`, `foxess_bms_info`, `foxess_info{serial,protocol_version,…}` | Ratings and firmware |
 
 Plus grid and EPS voltage, current and frequency, inverter and BMS temperatures, and BMS charge/discharge limits.
 
@@ -66,7 +72,9 @@ increase(foxess_solar_energy_kwh_total[1d])
 ## Notes
 
 - The inverter rejects reads that span unmapped registers, so the exporter reads several small blocks instead of one large one.
-- `foxess_bms_energy_remaining_kwh` uses a ×0.001 scale. That's inferred from SoC and not yet confirmed.
+- Settings, identity and battery capacity rarely change, so they're re-read every 5 minutes. Live values are read on every scrape.
+- Register 37632 is documented as "remain energy", but it always equals the design capacity, so it's exported as `foxess_battery_capacity_kwh`. Stored energy is capacity × SoC.
+- Alarm names come from the FoxESS Modbus protocol V1.05.04.00. Register 37636 (BMS force-charge flag) and the BMS fault registers 37626–37630 don't respond on H1 G2 firmware 3.39, so they aren't read.
 
 ## Grafana dashboard
 

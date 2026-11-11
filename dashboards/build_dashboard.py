@@ -278,7 +278,8 @@ place(stat("⚡ Grid",
 place(stat("✅ System",
            [target("foxess_up", "Inverter link", ref="A", instant=True),
             target("1 - foxess_inverter_state{state=\"off_grid\"}", "Mains power", ref="B", instant=True),
-            target("1 - foxess_inverter_state{state=\"fault\"}", "Faults", ref="C", instant=True)],
+            target("1 - clamp_max(sum(foxess_inverter_state{state=\"fault\"}) + sum(foxess_alarm), 1)", "Faults",
+                   ref="C", instant=True)],
            "none", text_mode="value_and_name", size=18,
            overrides=[
                {"matcher": {"id": "byName", "options": "Inverter link"},
@@ -419,7 +420,8 @@ place(timeseries("Battery temperature",
 y += 8
 batt = [
     ("Health", "foxess_battery_soh_percent", "percent", 0, "Capacity compared with new (100% = as new)."),
-    ("Energy remaining", "foxess_bms_energy_remaining_kwh", "kwatth", 2, "Energy left in the battery, per the BMS."),
+    ("Stored now", "foxess_battery_stored_kwh", "kwatth", 2, "Energy in the battery right now (capacity × charge level)."),
+    ("Capacity", "foxess_battery_capacity_kwh", "kwatth", 2, "How much the battery holds when full. Falls slowly as it ages."),
     ("Round-trip efficiency", "foxess_battery_discharge_energy_kwh_total / foxess_battery_charge_energy_kwh_total"
      " * 100 and foxess_battery_charge_energy_kwh_total >= 5", "percent", 0, "Energy got back out of the battery for every unit put in, since install. "
                              "85–95% is typical; it reads low until the battery has done a few full cycles."),
@@ -427,12 +429,17 @@ batt = [
      " - foxess_battery_charge_energy_kwh_total * $export_price", "currencyGBP", 2,
      "Since install: energy the battery supplied (valued at the import price) minus what it stored "
      "(valued at the export price you'd otherwise have earned)."),
-    ("Max charge rate", "foxess_bms_charge_limit_amps", "amp", 1, "Current the BMS will currently accept."),
-    ("Max discharge rate", "foxess_bms_discharge_limit_amps", "amp", 1, "Current the BMS will currently supply."),
+    ("Cell voltage", None, "volt", 1, "Highest and lowest cell voltage (0.1 V resolution). A widening gap "
+                                     "between them means the cells are drifting out of balance."),
 ]
 for i, (t, e, u, dec, d) in enumerate(batt):
-    place(stat(t, targets((e, t)), u, BATTERY, decimals=dec, desc=d, spark=u in ("percent", "kwatth", "amp")),
-          i * 4, y, 4, 4)
+    if e is None:
+        p = stat(t, targets(('foxess_bms_cell_voltage_volts{bound="high"}', "Highest"),
+                            ('foxess_bms_cell_voltage_volts{bound="low"}', "Lowest")),
+                 u, BATTERY, decimals=dec, desc=d, text_mode="value_and_name", size=20)
+    else:
+        p = stat(t, targets((e, t)), u, BATTERY, decimals=dec, desc=d, spark=u in ("percent", "kwatth"))
+    place(p, i * 4, y, 4, 4)
 y += 4
 
 # ── Solar panels ─────────────────────────────────────────────────────────────
@@ -496,6 +503,38 @@ place(timeseries("Battery current", targets(("foxess_battery_current_amps", "Inv
                  "amp", decimals=1, desc="Battery current as seen by the inverter and by the battery itself.",
                  overrides=[override("Inverter side", SERIES[0]), override("BMS", SERIES[1])]),
       12, hy, 12, 8, into=health)
+hy += 8
+alarms = stat("Active alarms", [target("foxess_alarm == 1", "{{alarm}}", instant=True)], "none", BAD,
+              text_mode="value_and_name", size=16, desc="Named inverter alarms from the Fox protocol.",
+              mappings=[{"type": "value", "options": {"1": {"text": "Active", "color": BAD, "index": 0}}}])
+alarms["fieldConfig"]["defaults"]["noValue"] = "All clear"
+alarms["fieldConfig"]["defaults"]["color"] = fixed(GOOD)
+place(alarms, 0, hy, 6, 5, into=health)
+place(stat("Battery", [target("foxess_battery_modules", "Modules", ref="A", instant=True),
+                       target("foxess_battery_design_capacity_kwh", "Design capacity (kWh)", ref="B", instant=True),
+                       target("foxess_battery_capacity_amp_hours", "Capacity (Ah)", ref="C", instant=True)],
+           "none", BATTERY, text_mode="value_and_name", size=18, desc="Battery modules and rated capacity."),
+      6, hy, 6, 5, into=health)
+place(stat("Grid limits", [target("foxess_export_limit_watts", "Export", ref="A", instant=True),
+                           target("foxess_import_limit_watts", "Import", ref="B", instant=True)],
+           "watt", GRID, text_mode="value_and_name", size=18, decimals=1,
+           desc="Maximum power the inverter will export to, or import from, the grid."), 12, hy, 4, 5, into=health)
+place(stat("Forced grid charging", [target("foxess_charge_period_enabled", "Slot {{period}}: {{start}}–{{end}}",
+                                           instant=True)],
+           "none", text_mode="value_and_name", size=16,
+           mappings=[{"type": "value", "options": {"0": {"text": "Off", "color": GOOD, "index": 0},
+                                                   "1": {"text": "On", "color": WARN, "index": 1}}}],
+           desc="Time slots when the inverter charges the battery from the grid (e.g. on a cheap overnight tariff)."),
+      16, hy, 4, 5, into=health)
+place(stat("Control", [target("foxess_remote_control_enabled", "Remote control", ref="A", instant=True),
+                       target('foxess_meter_connected{meter="1"}', "Grid meter", ref="B", instant=True)],
+           "none", text_mode="value_and_name", size=16,
+           overrides=[{"matcher": {"id": "byName", "options": "Remote control"},
+                       "properties": [{"id": "mappings", "value": ON_OFF("On", "Off", WARN, GOOD)}]},
+                      {"matcher": {"id": "byName", "options": "Grid meter"},
+                       "properties": [{"id": "mappings", "value": ON_OFF("Connected", "Missing", GOOD, BAD)}]}],
+           desc="Whether something external is controlling the inverter, and whether the grid meter is connected."),
+      20, hy, 4, 5, into=health)
 row("⚙️  Inverter & grid health", y, collapsed=True, children=health)
 
 dashboard = {
