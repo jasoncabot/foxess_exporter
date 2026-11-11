@@ -22,13 +22,15 @@ FOX_HOST=192.168.1.207 python3 foxess_exporter.py
 curl localhost:9877/metrics
 ```
 
-With Docker Compose, set `FOX_HOST` in `compose.yaml`, then:
+A multi-arch image (amd64 and arm64) is published to GHCR on every push to `main`:
 
 ```sh
-docker compose up -d --build
+docker run -d -p 9877:9877 -e FOX_HOST=192.168.1.207 ghcr.io/jasoncabot/foxess_exporter:latest
 ```
 
-On TrueNAS SCALE, `truenas-app.yaml` is a hardened custom-app definition. It runs the stock `python:3.13-alpine` image with the script bind-mounted from a dataset, a read-only filesystem, all capabilities dropped, and a non-root user.
+To build locally instead, set `FOX_HOST` in `compose.yaml` and run `docker compose up -d --build`.
+
+On TrueNAS SCALE, `truenas-app.yaml` is a hardened custom-app definition that uses the published image, with a read-only filesystem, all capabilities dropped, and a non-root user.
 
 Add the scrape job to Prometheus (see `prometheus-scrape.yaml`):
 
