@@ -108,7 +108,7 @@
     {
       "type": "canvas",
       "title": "Where the power is going right now",
-      "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
+      "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W are hidden as measurement noise. Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
       "targets": [
         {
           "datasource": {
@@ -148,7 +148,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "abs(foxess_battery_power_watts)",
+          "expr": "abs((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)))",
           "legendFormat": "Battery",
           "refId": "D",
           "range": false,
@@ -214,7 +214,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(-foxess_battery_power_watts, 0)) + 15 * (clamp_min(-foxess_battery_power_watts, 0) > bool 20))",
+          "expr": "(sqrt(clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))",
           "legendFormat": "Charging",
           "refId": "J",
           "range": false,
@@ -225,7 +225,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(foxess_battery_power_watts, 0)) + 15 * (clamp_min(foxess_battery_power_watts, 0) > bool 20))",
+          "expr": "(sqrt(clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))",
           "legendFormat": "Discharging",
           "refId": "K",
           "range": false,
@@ -1139,7 +1139,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(-foxess_battery_power_watts, 0)",
+          "expr": "clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)",
           "legendFormat": "Charging",
           "refId": "A",
           "range": true,
@@ -1150,7 +1150,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(foxess_battery_power_watts, 0)",
+          "expr": "clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)",
           "legendFormat": "Powering home",
           "refId": "B",
           "range": true,

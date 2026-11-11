@@ -128,6 +128,9 @@ ON_OFF = lambda on, off, on_col, off_col: [  # noqa: E731
 
 # Shared expressions
 SOLAR_W = "sum(foxess_pv_power_watts)"
+# Battery power with readings under 80 W zeroed: the inverter-side figure idles at ±0.1 A (~40-60 W) of noise
+# when the battery is resting, which would otherwise show as phantom charging.
+BATT_W = "(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80))"
 SELF_SUFF_TODAY = ("clamp_min(clamp_max((foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh)"
                    " / foxess_load_energy_today_kwh, 1), 0) * 100")
 SAVED_TODAY = ("clamp_min(foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh, 0) * $import_price"
@@ -199,15 +202,15 @@ def power_flow():
     # Arrow widths: sqrt so small flows stay visible, plus a floor once anything over 20 W is moving.
     flow = "(sqrt(clamp_min({0}, 0)) + 15 * (clamp_min({0}, 0) > bool 20))".format
     tg = targets((SOLAR_W, "Solar"), ("foxess_load_power_watts", "Home"),
-                 ("abs(foxess_grid_ct_power_watts)", "Grid"), ("abs(foxess_battery_power_watts)", "Battery"),
+                 ("abs(foxess_grid_ct_power_watts)", "Grid"), (f"abs({BATT_W})", "Battery"),
                  ("foxess_battery_soc_percent", "Charge"),
                  (flow(SOLAR_W), "Solar flow"), (flow("foxess_load_power_watts"), "Home flow"),
                  (flow("-foxess_grid_ct_power_watts"), "Buying"), (flow("foxess_grid_ct_power_watts"), "Selling"),
-                 (flow("-foxess_battery_power_watts"), "Charging"),
-                 (flow("foxess_battery_power_watts"), "Discharging"), instant=True)
+                 (flow(f"-{BATT_W}"), "Charging"),
+                 (flow(BATT_W), "Discharging"), instant=True)
     flow_fields = ["Solar flow", "Home flow", "Buying", "Selling", "Charging", "Discharging"]
     return {"type": "canvas", "title": "Where the power is going right now",
-            "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. "
+            "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W are hidden as measurement noise. "
                            "Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
             "targets": tg,
             "fieldConfig": {"defaults": {"unit": "watt", "decimals": 1,
@@ -236,8 +239,8 @@ place(gauge("🔋 Battery level", targets(("foxess_battery_soc_percent", "Batter
             desc="How full the battery is. It stops discharging at the minimum level set on the inverter."),
       14, y, 5, 6)
 place(stat("🔋 Battery is…",
-           targets(("clamp_min(-foxess_battery_power_watts, 0)", "Charging"),
-                   ("clamp_min(foxess_battery_power_watts, 0)", "Powering home")),
+           targets((f"clamp_min(-{BATT_W}, 0)", "Charging"),
+                   (f"clamp_min({BATT_W}, 0)", "Powering home")),
            "watt", BATTERY, text_mode="value_and_name", decimals=1, size=22,
            desc="Charging = storing spare energy. Powering home = the battery is supplying the house."),
       14, y + 6, 5, 6)
