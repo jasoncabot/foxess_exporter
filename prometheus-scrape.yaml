@@ -1,0 +1,5 @@
+# Add under scrape_configs: in prometheus.yml
+  - job_name: foxess
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["<nas-ip-or-container-name>:9877"]

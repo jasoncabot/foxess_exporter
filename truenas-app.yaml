@@ -1,0 +1,30 @@
+services:
+  foxess-exporter:
+    cap_drop:
+      - ALL
+    command: ["python3", "/app/foxess_exporter.py"]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
+    environment:
+      FOX_HOST: 192.168.1.207
+      LISTEN_PORT: 9877
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+    healthcheck:
+      disable: True
+    image: python:3.13-alpine
+    ports:
+      - 192.168.100.0:30877:9877
+    read_only: True
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    user: '568:568'
+    volumes:
+      - /mnt/POOL/apps/foxess-exporter/foxess_exporter.py:/app/foxess_exporter.py:ro
