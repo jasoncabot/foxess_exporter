@@ -63,7 +63,8 @@ def place(p, x, y, w, h, into=None):
 def stat(title, tgts, unit, color=None, desc="", decimals=None, spark=False, th=None, mappings=None,
          overrides=None, text_mode="value", min_=None, max_=None, size=None, orientation="auto"):
     defaults = {"unit": unit, "color": fixed(color) if color else {"mode": "thresholds"},
-                "thresholds": th or thresholds((None, color or "text")), "mappings": mappings or []}
+                "thresholds": th or thresholds((None, color or "text")), "mappings": mappings or [],
+                "noValue": "—"}
     if decimals is not None:
         defaults["decimals"] = decimals
     if min_ is not None:
@@ -83,7 +84,8 @@ def stat(title, tgts, unit, color=None, desc="", decimals=None, spark=False, th=
 def gauge(title, tgts, unit, th, desc="", min_=0, max_=100, decimals=0):
     return {"type": "gauge", "title": title, "description": desc, "targets": tgts,
             "fieldConfig": {"defaults": {"unit": unit, "min": min_, "max": max_, "decimals": decimals,
-                                         "color": {"mode": "thresholds"}, "thresholds": th},
+                                         "color": {"mode": "thresholds"}, "thresholds": th,
+                                         "noValue": "—"},
                             "overrides": []},
             "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                         "showThresholdMarkers": False, "showThresholdLabels": False, "minVizHeight": 75,
@@ -131,12 +133,28 @@ SOLAR_W = "sum(foxess_pv_power_watts)"
 # Battery power with readings under 80 W zeroed: the inverter-side figure idles at ±0.1 A (~40-60 W) of noise
 # when the battery is resting, which would otherwise show as phantom charging.
 BATT_W = "(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80))"
+# Grid power with readings under 30 W zeroed: the inverter hunts around zero when the battery covers the house.
+GRID_W = "(foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30))"
+# Ratios only once the denominator is at least 0.5 kWh; energy counters step in 0.1 kWh, so smaller is noise.
+MIN_KWH = 0.5
 SELF_SUFF_TODAY = ("clamp_min(clamp_max((foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh)"
-                   " / foxess_load_energy_today_kwh, 1), 0) * 100")
+                   f" / foxess_load_energy_today_kwh, 1), 0) * 100 and foxess_load_energy_today_kwh >= {MIN_KWH}")
 SAVED_TODAY = ("clamp_min(foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh, 0) * $import_price"
                " + foxess_grid_export_energy_today_kwh * $export_price")
 SELF_USE_TODAY = ("clamp_min(clamp_max((foxess_solar_energy_today_kwh - foxess_grid_export_energy_today_kwh)"
-                  " / foxess_solar_energy_today_kwh, 1), 0) * 100")
+                  f" / foxess_solar_energy_today_kwh, 1), 0) * 100 and foxess_solar_energy_today_kwh >= {MIN_KWH}")
+
+
+def daily(m):
+    """A completed day's total, taken from the inverter's own today counter (which resets at its local midnight).
+    The 22h window skips the first two hours after UTC midnight, so clock drift and BST can't pick up the
+    previous day's total before the inverter resets."""
+    return f"max_over_time({m}[22h])"
+
+
+def month_total(m):
+    """This month's total: each completed day's final value since the 1st, plus today so far."""
+    return f"((sum(sum_over_time({daily(m)}[$__range:1d])) or vector(0)) + sum({m}))"
 
 
 def power_flow():
@@ -202,18 +220,25 @@ def power_flow():
     # Arrow widths: sqrt so small flows stay visible, plus a floor once anything over 20 W is moving.
     flow = "(sqrt(clamp_min({0}, 0)) + 15 * (clamp_min({0}, 0) > bool 20))".format
     tg = targets((SOLAR_W, "Solar"), ("foxess_load_power_watts", "Home"),
-                 ("abs(foxess_grid_ct_power_watts)", "Grid"), (f"abs({BATT_W})", "Battery"),
+                 (f"abs({GRID_W})", "Grid"), (f"abs({BATT_W})", "Battery"),
                  ("foxess_battery_soc_percent", "Charge"),
                  (flow(SOLAR_W), "Solar flow"), (flow("foxess_load_power_watts"), "Home flow"),
-                 (flow("-foxess_grid_ct_power_watts"), "Buying"), (flow("foxess_grid_ct_power_watts"), "Selling"),
+                 (flow(f"-{GRID_W}"), "Buying"), (flow(GRID_W), "Selling"),
                  (flow(f"-{BATT_W}"), "Charging"),
                  (flow(BATT_W), "Discharging"), instant=True)
     flow_fields = ["Solar flow", "Home flow", "Buying", "Selling", "Charging", "Discharging"]
+    # When the inverter is offline, show "—" in the boxes (NaN, mapped below) and hide the arrows (0 width)
+    # rather than canvas's "Field not found" and default-width arrows.
+    for t in tg:
+        t["expr"] = f'({t["expr"]}) or on() vector({0 if t["legendFormat"] in flow_fields else "NaN"})'
     return {"type": "canvas", "title": "Where the power is going right now",
-            "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W are hidden as measurement noise. "
+            "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W and grid flows "
+                           "under 30 W are hidden as measurement noise. "
                            "Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
             "targets": tg,
             "fieldConfig": {"defaults": {"unit": "watt", "decimals": 1,
+                                         "mappings": [{"type": "special", "options": {
+                                             "match": "nan", "result": {"text": "—", "index": 0}}}],
                                          "color": {"mode": "fixed", "fixedColor": "text"}},
                             "overrides": [{"matcher": {"id": "byName", "options": "Charge"},
                                            "properties": [{"id": "unit", "value": "percent"},
@@ -234,26 +259,26 @@ y = 0
 row("☀️  Right now", y)
 y += 1
 place(power_flow(), 0, y, 14, 12)
-place(gauge("🔋 Battery level", targets(("foxess_battery_soc_percent", "Battery")), "percent",
+place(gauge("🔋 Battery level", targets(("foxess_battery_soc_percent", "Battery"), instant=True), "percent",
             thresholds((None, WARN), (20, BATTERY)),
             desc="How full the battery is. It stops discharging at the minimum level set on the inverter."),
       14, y, 5, 6)
 place(stat("🔋 Battery is…",
            targets((f"clamp_min(-{BATT_W}, 0)", "Charging"),
-                   (f"clamp_min({BATT_W}, 0)", "Powering home")),
+                   (f"clamp_min({BATT_W}, 0)", "Powering home"), instant=True),
            "watt", BATTERY, text_mode="value_and_name", decimals=1, size=22,
            desc="Charging = storing spare energy. Powering home = the battery is supplying the house."),
       14, y + 6, 5, 6)
 place(stat("⚡ Grid",
-           targets(("clamp_min(-foxess_grid_ct_power_watts, 0)", "Buying"),
-                   ("clamp_min(foxess_grid_ct_power_watts, 0)", "Selling")),
+           targets((f"clamp_min(-{GRID_W}, 0)", "Buying"),
+                   (f"clamp_min({GRID_W}, 0)", "Selling"), instant=True),
            "watt", GRID, text_mode="value_and_name", decimals=1, size=22,
            desc="Buying = importing from the grid (costs money). Selling = exporting spare solar."),
       19, y + 6, 5, 6)
 place(stat("✅ System",
-           [target("foxess_up", "Inverter link", ref="A"),
-            target("1 - foxess_inverter_state{state=\"off_grid\"}", "Mains power", ref="B"),
-            target("1 - foxess_inverter_state{state=\"fault\"}", "Faults", ref="C")],
+           [target("foxess_up", "Inverter link", ref="A", instant=True),
+            target("1 - foxess_inverter_state{state=\"off_grid\"}", "Mains power", ref="B", instant=True),
+            target("1 - foxess_inverter_state{state=\"fault\"}", "Faults", ref="C", instant=True)],
            "none", text_mode="value_and_name", size=18,
            overrides=[
                {"matcher": {"id": "byName", "options": "Inverter link"},
@@ -276,18 +301,18 @@ today = [
     ("💷 Sold", "foxess_grid_export_energy_today_kwh", GRID, "Spare solar exported today."),
 ]
 for i, (t, e, c, d) in enumerate(today):
-    place(stat(t, targets((e, t)), "kwatth", c, decimals=1, desc=d), i * 3, y, 3, 5)
-place(gauge("🌱 Self-powered", targets((SELF_SUFF_TODAY, "Self-powered")), "percent",
+    place(stat(t, targets((e, t), instant=True), "kwatth", c, decimals=1, desc=d), i * 3, y, 3, 5)
+place(gauge("🌱 Self-powered", targets((SELF_SUFF_TODAY, "Self-powered"), instant=True), "percent",
             thresholds((None, WARN), (60, GOOD)),
             desc="Self-sufficiency: share of today's home energy that came from your own solar and battery "
-                 "instead of the grid."),
+                 "instead of the grid. Shows — until the house has used 0.5 kWh."),
       12, y, 4, 5)
-place(gauge("♻️ Solar kept", targets((SELF_USE_TODAY, "Solar kept")), "percent",
+place(gauge("♻️ Solar kept", targets((SELF_USE_TODAY, "Solar kept"), instant=True), "percent",
             thresholds((None, WARN), (80, GOOD)),
             desc="Self-consumption: share of today's solar used in the house or stored in the battery, "
-                 "rather than sold to the grid."),
+                 "rather than sold to the grid. Shows — until 0.5 kWh of solar."),
       16, y, 4, 5)
-place(stat("💰 Saved today", targets((SAVED_TODAY, "Saved")), "currencyGBP", GOOD, decimals=2,
+place(stat("💰 Saved today", targets((SAVED_TODAY, "Saved"), instant=True), "currencyGBP", GOOD, decimals=2,
            desc="Energy you didn't have to buy (at the import price) plus export earnings (at the export "
                 "price). Set your tariff in the dashboard variables at the top."),
       20, y, 4, 5)
@@ -316,14 +341,14 @@ y += 10
 # ── Last 30 days ─────────────────────────────────────────────────────────────
 row("📈  Last 30 days", y)
 y += 1
-place(timeseries("Solar made each day", targets(("increase(foxess_solar_energy_kwh_total[1d])", "Solar")),
+place(timeseries("Solar made each day", targets((daily("foxess_solar_energy_today_kwh"), "Solar")),
                  "kwatth", draw="bars", fill=80, decimals=1, time_from="30d", interval="1d", min_=0,
                  desc="Daily solar generation for each completed day.", overrides=[override("Solar", SOLAR)]),
       0, y, 12, 9)
 place(timeseries("Where the home's energy came from each day",
-                 targets(("clamp_min(increase(foxess_load_energy_kwh_total[1d])"
-                          " - increase(foxess_grid_import_energy_kwh_total[1d]), 0)", "Own solar & battery"),
-                         ("increase(foxess_grid_import_energy_kwh_total[1d])", "Bought from grid")),
+                 targets((f"clamp_min({daily('foxess_load_energy_today_kwh')}"
+                          f" - {daily('foxess_grid_import_energy_today_kwh')}, 0)", "Own solar & battery"),
+                         (daily("foxess_grid_import_energy_today_kwh"), "Bought from grid")),
                  "kwatth", draw="bars", fill=80, stack=True, decimals=1, time_from="30d", interval="1d", min_=0,
                  desc="Each bar is a completed day's total home use, split by where it came from.",
                  overrides=[override("Own solar & battery", BATTERY), override("Bought from grid", GRID)]),
@@ -333,16 +358,16 @@ y += 9
 # ── This month ───────────────────────────────────────────────────────────────
 row("🗓️  This month", y)
 y += 1
-inc = "increase({}[$__range])".format
+solar_m, load_m, import_m, export_m = (month_total(f"foxess_{n}_energy_today_kwh")
+                                       for n in ("solar", "load", "grid_import", "grid_export"))
 month = [
-    ("☀️ Solar made", inc("foxess_solar_energy_kwh_total"), "kwatth", SOLAR, 1, "Generated since the 1st."),
-    ("🏠 Home used", inc("foxess_load_energy_kwh_total"), "kwatth", HOME, 1, "House use since the 1st."),
-    ("⚡ Bought from grid", inc("foxess_grid_import_energy_kwh_total"), "kwatth", GRID, 1, "Imported since the 1st."),
-    ("💷 Sold to grid", inc("foxess_grid_export_energy_kwh_total"), "kwatth", GRID, 1, "Exported since the 1st."),
-    ("🌱 Self-powered", f"(1 - {inc('foxess_grid_import_energy_kwh_total')} / {inc('foxess_load_energy_kwh_total')})"
-                       " * 100", "percent", GOOD, 0, "Share of this month's home energy not bought from the grid."),
-    ("💰 Saved", f"clamp_min({inc('foxess_load_energy_kwh_total')} - {inc('foxess_grid_import_energy_kwh_total')}, 0)"
-                f" * $import_price + {inc('foxess_grid_export_energy_kwh_total')} * $export_price",
+    ("☀️ Solar made", solar_m, "kwatth", SOLAR, 1, "Generated since the 1st."),
+    ("🏠 Home used", load_m, "kwatth", HOME, 1, "House use since the 1st."),
+    ("⚡ Bought from grid", import_m, "kwatth", GRID, 1, "Imported since the 1st."),
+    ("💷 Sold to grid", export_m, "kwatth", GRID, 1, "Exported since the 1st."),
+    ("🌱 Self-powered", f"clamp_min((1 - {import_m} / {load_m}) * 100, 0) and {load_m} >= {MIN_KWH}",
+     "percent", GOOD, 0, "Share of this month's home energy not bought from the grid."),
+    ("💰 Saved", f"clamp_min({load_m} - {import_m}, 0) * $import_price + {export_m} * $export_price",
      "currencyGBP", GOOD, 2, "This month's saving at your tariff."),
 ]
 for i, (t, e, u, c, dec, d) in enumerate(month):
@@ -382,19 +407,21 @@ place(timeseries("Battery charging and discharging",
                  overrides=[override("Powering home", BATTERY), override("Charging", HOME)]),
       0, y, 12, 8)
 place(timeseries("Battery temperature",
-                 targets(("foxess_battery_temperature_celsius", "Battery"),
+                 targets(("foxess_battery_temperature_celsius", "Pack sensor"),
                          ("foxess_bms_cell_temperature_celsius{bound=\"high\"}", "Warmest cell"),
                          ("foxess_bms_cell_temperature_celsius{bound=\"low\"}", "Coolest cell")),
                  "celsius", decimals=1, legend_calcs=["min", "max"],
-                 desc="Lithium batteries are happiest between about 15 and 30 °C.",
-                 overrides=[override(n, SERIES[i]) for i, n in enumerate(("Battery", "Warmest cell", "Coolest cell"))]),
+                 desc="Warmest/coolest cell are the actual cell temperatures. The pack sensor sits elsewhere in the "
+                      "battery (likely the control board) and usually reads warmer. Lithium cells are happiest "
+                      "between about 15 and 30 °C.",
+                 overrides=[override(n, SERIES[i]) for i, n in enumerate(("Pack sensor", "Warmest cell", "Coolest cell"))]),
       12, y, 12, 8)
 y += 8
 batt = [
     ("Health", "foxess_battery_soh_percent", "percent", 0, "Capacity compared with new (100% = as new)."),
     ("Energy remaining", "foxess_bms_energy_remaining_kwh", "kwatth", 2, "Energy left in the battery, per the BMS."),
     ("Round-trip efficiency", "foxess_battery_discharge_energy_kwh_total / foxess_battery_charge_energy_kwh_total"
-     " * 100", "percent", 0, "Energy got back out of the battery for every unit put in, since install. "
+     " * 100 and foxess_battery_charge_energy_kwh_total >= 5", "percent", 0, "Energy got back out of the battery for every unit put in, since install. "
                              "85–95% is typical; it reads low until the battery has done a few full cycles."),
     ("Battery has earned", "foxess_battery_discharge_energy_kwh_total * $import_price"
      " - foxess_battery_charge_energy_kwh_total * $export_price", "currencyGBP", 2,
@@ -491,8 +518,8 @@ dashboard = {
     "links": [{"title": "foxess_exporter", "type": "link", "icon": "external link", "targetBlank": True,
                "url": "https://github.com/jasoncabot/foxess_exporter"}],
     "templating": {"list": [
-        {"type": "textbox", "name": "import_price", "label": "Import price £/kWh", "query": "0.245",
-         "current": {"text": "0.245", "value": "0.245"}, "hide": 0},
+        {"type": "textbox", "name": "import_price", "label": "Import price £/kWh", "query": "0.2875",
+         "current": {"text": "0.2875", "value": "0.2875"}, "hide": 0},
         {"type": "textbox", "name": "export_price", "label": "Export price £/kWh", "query": "0.15",
          "current": {"text": "0.15", "value": "0.15"}, "hide": 0},
         {"type": "textbox", "name": "carbon_intensity", "label": "Grid CO₂ kg/kWh", "query": "0.207",

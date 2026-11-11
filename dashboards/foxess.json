@@ -57,10 +57,10 @@
         "type": "textbox",
         "name": "import_price",
         "label": "Import price £/kWh",
-        "query": "0.245",
+        "query": "0.2875",
         "current": {
-          "text": "0.245",
-          "value": "0.245"
+          "text": "0.2875",
+          "value": "0.2875"
         },
         "hide": 0
       },
@@ -108,14 +108,14 @@
     {
       "type": "canvas",
       "title": "Where the power is going right now",
-      "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W are hidden as measurement noise. Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
+      "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W and grid flows under 30 W are hidden as measurement noise. Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(foxess_pv_power_watts)",
+          "expr": "(sum(foxess_pv_power_watts)) or on() vector(NaN)",
           "legendFormat": "Solar",
           "refId": "A",
           "range": false,
@@ -126,7 +126,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "foxess_load_power_watts",
+          "expr": "(foxess_load_power_watts) or on() vector(NaN)",
           "legendFormat": "Home",
           "refId": "B",
           "range": false,
@@ -137,7 +137,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "abs(foxess_grid_ct_power_watts)",
+          "expr": "(abs((foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)))) or on() vector(NaN)",
           "legendFormat": "Grid",
           "refId": "C",
           "range": false,
@@ -148,7 +148,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "abs((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)))",
+          "expr": "(abs((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)))) or on() vector(NaN)",
           "legendFormat": "Battery",
           "refId": "D",
           "range": false,
@@ -159,7 +159,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "foxess_battery_soc_percent",
+          "expr": "(foxess_battery_soc_percent) or on() vector(NaN)",
           "legendFormat": "Charge",
           "refId": "E",
           "range": false,
@@ -170,7 +170,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(sum(foxess_pv_power_watts), 0)) + 15 * (clamp_min(sum(foxess_pv_power_watts), 0) > bool 20))",
+          "expr": "((sqrt(clamp_min(sum(foxess_pv_power_watts), 0)) + 15 * (clamp_min(sum(foxess_pv_power_watts), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Solar flow",
           "refId": "F",
           "range": false,
@@ -181,7 +181,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(foxess_load_power_watts, 0)) + 15 * (clamp_min(foxess_load_power_watts, 0) > bool 20))",
+          "expr": "((sqrt(clamp_min(foxess_load_power_watts, 0)) + 15 * (clamp_min(foxess_load_power_watts, 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Home flow",
           "refId": "G",
           "range": false,
@@ -192,7 +192,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(-foxess_grid_ct_power_watts, 0)) + 15 * (clamp_min(-foxess_grid_ct_power_watts, 0) > bool 20))",
+          "expr": "((sqrt(clamp_min(-(foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)), 0)) + 15 * (clamp_min(-(foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Buying",
           "refId": "H",
           "range": false,
@@ -203,7 +203,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(foxess_grid_ct_power_watts, 0)) + 15 * (clamp_min(foxess_grid_ct_power_watts, 0) > bool 20))",
+          "expr": "((sqrt(clamp_min((foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)), 0)) + 15 * (clamp_min((foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Selling",
           "refId": "I",
           "range": false,
@@ -214,7 +214,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))",
+          "expr": "((sqrt(clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Charging",
           "refId": "J",
           "range": false,
@@ -225,7 +225,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sqrt(clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))",
+          "expr": "((sqrt(clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Discharging",
           "refId": "K",
           "range": false,
@@ -236,6 +236,18 @@
         "defaults": {
           "unit": "watt",
           "decimals": 1,
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "—",
+                  "index": 0
+                }
+              }
+            }
+          ],
           "color": {
             "mode": "fixed",
             "fixedColor": "text"
@@ -1074,8 +1086,8 @@
           "expr": "foxess_battery_soc_percent",
           "legendFormat": "Battery",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1099,7 +1111,8 @@
                 "value": 20
               }
             ]
-          }
+          },
+          "noValue": "—"
         },
         "overrides": []
       },
@@ -1142,8 +1155,8 @@
           "expr": "clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)",
           "legendFormat": "Charging",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         },
         {
           "datasource": {
@@ -1153,8 +1166,8 @@
           "expr": "clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)",
           "legendFormat": "Powering home",
           "refId": "B",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1174,6 +1187,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -1219,22 +1233,22 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(-foxess_grid_ct_power_watts, 0)",
+          "expr": "clamp_min(-(foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)), 0)",
           "legendFormat": "Buying",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(foxess_grid_ct_power_watts, 0)",
+          "expr": "clamp_min((foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30)), 0)",
           "legendFormat": "Selling",
           "refId": "B",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1254,6 +1268,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -1302,8 +1317,8 @@
           "expr": "foxess_up",
           "legendFormat": "Inverter link",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         },
         {
           "datasource": {
@@ -1313,8 +1328,8 @@
           "expr": "1 - foxess_inverter_state{state=\"off_grid\"}",
           "legendFormat": "Mains power",
           "refId": "B",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         },
         {
           "datasource": {
@@ -1324,8 +1339,8 @@
           "expr": "1 - foxess_inverter_state{state=\"fault\"}",
           "legendFormat": "Faults",
           "refId": "C",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1343,7 +1358,8 @@
               }
             ]
           },
-          "mappings": []
+          "mappings": [],
+          "noValue": "—"
         },
         "overrides": [
           {
@@ -1489,8 +1505,8 @@
           "expr": "foxess_solar_energy_today_kwh",
           "legendFormat": "☀️ Solar made",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1510,6 +1526,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -1555,8 +1572,8 @@
           "expr": "foxess_load_energy_today_kwh",
           "legendFormat": "🏠 Home used",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1576,6 +1593,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -1621,8 +1639,8 @@
           "expr": "foxess_grid_import_energy_today_kwh",
           "legendFormat": "⚡ Bought",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1642,6 +1660,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -1687,8 +1706,8 @@
           "expr": "foxess_grid_export_energy_today_kwh",
           "legendFormat": "💷 Sold",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1708,6 +1727,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -1743,18 +1763,18 @@
     {
       "type": "gauge",
       "title": "🌱 Self-powered",
-      "description": "Self-sufficiency: share of today's home energy that came from your own solar and battery instead of the grid.",
+      "description": "Self-sufficiency: share of today's home energy that came from your own solar and battery instead of the grid. Shows — until the house has used 0.5 kWh.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(clamp_max((foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh) / foxess_load_energy_today_kwh, 1), 0) * 100",
+          "expr": "clamp_min(clamp_max((foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh) / foxess_load_energy_today_kwh, 1), 0) * 100 and foxess_load_energy_today_kwh >= 0.5",
           "legendFormat": "Self-powered",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1778,7 +1798,8 @@
                 "value": 60
               }
             ]
-          }
+          },
+          "noValue": "—"
         },
         "overrides": []
       },
@@ -1811,18 +1832,18 @@
     {
       "type": "gauge",
       "title": "♻️ Solar kept",
-      "description": "Self-consumption: share of today's solar used in the house or stored in the battery, rather than sold to the grid.",
+      "description": "Self-consumption: share of today's solar used in the house or stored in the battery, rather than sold to the grid. Shows — until 0.5 kWh of solar.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(clamp_max((foxess_solar_energy_today_kwh - foxess_grid_export_energy_today_kwh) / foxess_solar_energy_today_kwh, 1), 0) * 100",
+          "expr": "clamp_min(clamp_max((foxess_solar_energy_today_kwh - foxess_grid_export_energy_today_kwh) / foxess_solar_energy_today_kwh, 1), 0) * 100 and foxess_solar_energy_today_kwh >= 0.5",
           "legendFormat": "Solar kept",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1846,7 +1867,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "noValue": "—"
         },
         "overrides": []
       },
@@ -1889,8 +1911,8 @@
           "expr": "clamp_min(foxess_load_energy_today_kwh - foxess_grid_import_energy_today_kwh, 0) * $import_price + foxess_grid_export_energy_today_kwh * $export_price",
           "legendFormat": "Saved",
           "refId": "A",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -1910,6 +1932,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 2
         },
         "overrides": []
@@ -2299,7 +2322,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(foxess_solar_energy_kwh_total[1d])",
+          "expr": "max_over_time(foxess_solar_energy_today_kwh[22h])",
           "legendFormat": "Solar",
           "refId": "A",
           "range": true,
@@ -2400,7 +2423,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(increase(foxess_load_energy_kwh_total[1d]) - increase(foxess_grid_import_energy_kwh_total[1d]), 0)",
+          "expr": "clamp_min(max_over_time(foxess_load_energy_today_kwh[22h]) - max_over_time(foxess_grid_import_energy_today_kwh[22h]), 0)",
           "legendFormat": "Own solar & battery",
           "refId": "A",
           "range": true,
@@ -2411,7 +2434,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(foxess_grid_import_energy_kwh_total[1d])",
+          "expr": "max_over_time(foxess_grid_import_energy_today_kwh[22h])",
           "legendFormat": "Bought from grid",
           "refId": "B",
           "range": true,
@@ -2540,7 +2563,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(foxess_solar_energy_kwh_total[$__range])",
+          "expr": "((sum(sum_over_time(max_over_time(foxess_solar_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_solar_energy_today_kwh))",
           "legendFormat": "☀️ Solar made",
           "refId": "A",
           "range": false,
@@ -2564,6 +2587,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -2608,7 +2632,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(foxess_load_energy_kwh_total[$__range])",
+          "expr": "((sum(sum_over_time(max_over_time(foxess_load_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_load_energy_today_kwh))",
           "legendFormat": "🏠 Home used",
           "refId": "A",
           "range": false,
@@ -2632,6 +2656,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -2676,7 +2701,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(foxess_grid_import_energy_kwh_total[$__range])",
+          "expr": "((sum(sum_over_time(max_over_time(foxess_grid_import_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_grid_import_energy_today_kwh))",
           "legendFormat": "⚡ Bought from grid",
           "refId": "A",
           "range": false,
@@ -2700,6 +2725,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -2744,7 +2770,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(foxess_grid_export_energy_kwh_total[$__range])",
+          "expr": "((sum(sum_over_time(max_over_time(foxess_grid_export_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_grid_export_energy_today_kwh))",
           "legendFormat": "💷 Sold to grid",
           "refId": "A",
           "range": false,
@@ -2768,6 +2794,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -2812,7 +2839,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(1 - increase(foxess_grid_import_energy_kwh_total[$__range]) / increase(foxess_load_energy_kwh_total[$__range])) * 100",
+          "expr": "clamp_min((1 - ((sum(sum_over_time(max_over_time(foxess_grid_import_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_grid_import_energy_today_kwh)) / ((sum(sum_over_time(max_over_time(foxess_load_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_load_energy_today_kwh))) * 100, 0) and ((sum(sum_over_time(max_over_time(foxess_load_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_load_energy_today_kwh)) >= 0.5",
           "legendFormat": "🌱 Self-powered",
           "refId": "A",
           "range": false,
@@ -2836,6 +2863,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 0
         },
         "overrides": []
@@ -2880,7 +2908,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(increase(foxess_load_energy_kwh_total[$__range]) - increase(foxess_grid_import_energy_kwh_total[$__range]), 0) * $import_price + increase(foxess_grid_export_energy_kwh_total[$__range]) * $export_price",
+          "expr": "clamp_min(((sum(sum_over_time(max_over_time(foxess_load_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_load_energy_today_kwh)) - ((sum(sum_over_time(max_over_time(foxess_grid_import_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_grid_import_energy_today_kwh)), 0) * $import_price + ((sum(sum_over_time(max_over_time(foxess_grid_export_energy_today_kwh[22h])[$__range:1d])) or vector(0)) + sum(foxess_grid_export_energy_today_kwh)) * $export_price",
           "legendFormat": "💰 Saved",
           "refId": "A",
           "range": false,
@@ -2904,6 +2932,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 2
         },
         "overrides": []
@@ -2985,6 +3014,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -3051,6 +3081,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -3117,6 +3148,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -3183,6 +3215,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 0
         },
         "overrides": []
@@ -3249,6 +3282,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -3315,6 +3349,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 2
         },
         "overrides": []
@@ -3490,7 +3525,7 @@
     {
       "type": "timeseries",
       "title": "Battery temperature",
-      "description": "Lithium batteries are happiest between about 15 and 30 °C.",
+      "description": "Warmest/coolest cell are the actual cell temperatures. The pack sensor sits elsewhere in the battery (likely the control board) and usually reads warmer. Lithium cells are happiest between about 15 and 30 °C.",
       "targets": [
         {
           "datasource": {
@@ -3498,7 +3533,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "foxess_battery_temperature_celsius",
-          "legendFormat": "Battery",
+          "legendFormat": "Pack sensor",
           "refId": "A",
           "range": true,
           "instant": false
@@ -3569,7 +3604,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Battery"
+              "options": "Pack sensor"
             },
             "properties": [
               {
@@ -3674,6 +3709,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 0
         },
         "overrides": []
@@ -3740,6 +3776,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 2
         },
         "overrides": []
@@ -3782,7 +3819,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "foxess_battery_discharge_energy_kwh_total / foxess_battery_charge_energy_kwh_total * 100",
+          "expr": "foxess_battery_discharge_energy_kwh_total / foxess_battery_charge_energy_kwh_total * 100 and foxess_battery_charge_energy_kwh_total >= 5",
           "legendFormat": "Round-trip efficiency",
           "refId": "A",
           "range": true,
@@ -3806,6 +3843,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 0
         },
         "overrides": []
@@ -3872,6 +3910,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 2
         },
         "overrides": []
@@ -3938,6 +3977,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -4004,6 +4044,7 @@
             ]
           },
           "mappings": [],
+          "noValue": "—",
           "decimals": 1
         },
         "overrides": []
@@ -4436,7 +4477,8 @@
                   }
                 ]
               },
-              "mappings": []
+              "mappings": [],
+              "noValue": "—"
             },
             "overrides": []
           },
@@ -4504,7 +4546,8 @@
                   }
                 ]
               },
-              "mappings": []
+              "mappings": [],
+              "noValue": "—"
             },
             "overrides": []
           },
@@ -4589,7 +4632,8 @@
                     }
                   }
                 }
-              ]
+              ],
+              "noValue": "—"
             },
             "overrides": []
           },
@@ -4661,7 +4705,8 @@
                   }
                 ]
               },
-              "mappings": []
+              "mappings": [],
+              "noValue": "—"
             },
             "overrides": []
           },
@@ -4730,6 +4775,7 @@
                 ]
               },
               "mappings": [],
+              "noValue": "—",
               "decimals": 2
             },
             "overrides": []
