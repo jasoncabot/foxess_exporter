@@ -201,6 +201,13 @@ class Handler(BaseHTTPRequestHandler):
     client = None
 
     def do_GET(self):
+        if self.path == "/healthz":
+            # Liveness only: doesn't touch the inverter (foxess_up covers that).
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+            return
         if self.path != "/metrics":
             self.send_response(302)
             self.send_header("Location", "/metrics")

@@ -1,5 +1,6 @@
 services:
   foxess-exporter:
+    image: ghcr.io/jasoncabot/foxess_exporter:main
     cap_drop:
       - ALL
     deploy:
@@ -14,11 +15,19 @@ services:
       FOX_HOST: 192.168.1.207
       LISTEN_PORT: 9877
     healthcheck:
-      disable: True
-    image: ghcr.io/jasoncabot/foxess_exporter:latest
+      interval: 30s
+      retries: 5
+      start_period: 10s
+      test:
+        - CMD
+        - wget
+        - '-q'
+        - '--spider'
+        - http://0.0.0.0:9877/healthz
+      timeout: 5s
     ports:
       - 192.168.100.0:30877:9877
-    read_only: True
+    read_only: true
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

@@ -22,15 +22,13 @@ FOX_HOST=192.168.1.207 python3 foxess_exporter.py
 curl localhost:9877/metrics
 ```
 
-A multi-arch image (amd64 and arm64) is published to GHCR on every push to `main`:
+To build and run locally, set `FOX_HOST` in `compose.yaml` and run `docker compose up -d --build`.
 
-```sh
-docker run -d -p 9877:9877 -e FOX_HOST=192.168.1.207 ghcr.io/jasoncabot/foxess_exporter:latest
-```
+`GET /healthz` returns `ok` without contacting the inverter. Use it for liveness checks, and use `foxess_up` for inverter connectivity.
 
-To build locally instead, set `FOX_HOST` in `compose.yaml` and run `docker compose up -d --build`.
+## Deploying to the NAS
 
-On TrueNAS SCALE, `truenas-app.yaml` is a hardened custom-app definition that uses the published image, with a read-only filesystem, all capabilities dropped, and a non-root user.
+`deploy.yaml` is the stack definition. It pulls `ghcr.io/jasoncabot/foxess_exporter:main`, which `.github/workflows/build.yml` builds and pushes on every push to `main`. The container runs with a read-only filesystem as a non-root user, with all capabilities dropped, and keeps no state on disk. It's published on port `30877`.
 
 Add the scrape job to Prometheus (see `prometheus-scrape.yaml`):
 
@@ -38,7 +36,7 @@ Add the scrape job to Prometheus (see `prometheus-scrape.yaml`):
   - job_name: foxess
     scrape_interval: 15s
     static_configs:
-      - targets: ["<exporter-host>:9877"]
+      - targets: ["<nas>:30877"]
 ```
 
 ## Metrics
