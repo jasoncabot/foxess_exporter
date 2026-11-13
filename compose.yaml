@@ -4,6 +4,6 @@ services:
     container_name: foxess-exporter
     restart: unless-stopped
     environment:
-      FOX_HOST: 192.168.1.207   # inverter (wired LAN address); reserve this in DHCP
+      FOX_HOST: 192.168.1.83   # inverter (wired LAN address); reserve this in DHCP
     ports:
       - "9877:9877"

@@ -18,7 +18,7 @@ A Prometheus exporter for Fox ESS H1 G2 hybrid inverters that reads the inverter
 ## Running
 
 ```sh
-FOX_HOST=192.168.1.207 python3 foxess_exporter.py
+FOX_HOST=192.168.1.83 python3 foxess_exporter.py
 curl localhost:9877/metrics
 ```
 

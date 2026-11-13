@@ -12,7 +12,7 @@ services:
           cpus: '0.05'
           memory: 16M
     environment:
-      FOX_HOST: 192.168.1.207
+      FOX_HOST: 192.168.1.83
       LISTEN_PORT: 9877
     healthcheck:
       interval: 30s
