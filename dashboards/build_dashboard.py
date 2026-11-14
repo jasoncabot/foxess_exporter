@@ -130,9 +130,10 @@ ON_OFF = lambda on, off, on_col, off_col: [  # noqa: E731
 
 # Shared expressions
 SOLAR_W = "sum(foxess_pv_power_watts)"
-# Battery power with readings under 80 W zeroed: the inverter-side figure idles at ±0.1 A (~40-60 W) of noise
-# when the battery is resting, which would otherwise show as phantom charging.
-BATT_W = "(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80))"
+# Battery power with readings at or under $battery_noise_w zeroed (a dashboard variable, so it can be tuned without a
+# rebuild): the inverter-side figure idles at ±0.1 A (~40-85 W) of noise when the battery is resting, which would
+# otherwise show as phantom charging.
+BATT_W = "(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w))"
 # Grid power with readings under 30 W zeroed: the inverter hunts around zero when the battery covers the house.
 GRID_W = "(foxess_grid_ct_power_watts * (abs(foxess_grid_ct_power_watts) > bool 30))"
 # Ratios only once the denominator is at least 0.5 kWh; energy counters step in 0.1 kWh, so smaller is noise.
@@ -232,7 +233,7 @@ def power_flow():
     for t in tg:
         t["expr"] = f'({t["expr"]}) or on() vector({0 if t["legendFormat"] in flow_fields else "NaN"})'
     return {"type": "canvas", "title": "Where the power is going right now",
-            "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W and grid flows "
+            "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows of $battery_noise_w W or less and grid flows "
                            "under 30 W are hidden as measurement noise. "
                            "Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
             "targets": tg,
@@ -557,6 +558,8 @@ dashboard = {
     "links": [{"title": "foxess_exporter", "type": "link", "icon": "external link", "targetBlank": True,
                "url": "https://github.com/jasoncabot/foxess_exporter"}],
     "templating": {"list": [
+        {"type": "textbox", "name": "battery_noise_w", "label": "Ignore battery flow ≤ W", "query": "85",
+         "current": {"text": "85", "value": "85"}, "hide": 0},
         {"type": "textbox", "name": "import_price", "label": "Import price £/kWh", "query": "0.2875",
          "current": {"text": "0.2875", "value": "0.2875"}, "hide": 0},
         {"type": "textbox", "name": "export_price", "label": "Export price £/kWh", "query": "0.15",

@@ -55,6 +55,17 @@
     "list": [
       {
         "type": "textbox",
+        "name": "battery_noise_w",
+        "label": "Ignore battery flow ≤ W",
+        "query": "85",
+        "current": {
+          "text": "85",
+          "value": "85"
+        },
+        "hide": 0
+      },
+      {
+        "type": "textbox",
         "name": "import_price",
         "label": "Import price £/kWh",
         "query": "0.2875",
@@ -108,7 +119,7 @@
     {
       "type": "canvas",
       "title": "Where the power is going right now",
-      "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows under 80 W and grid flows under 30 W are hidden as measurement noise. Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
+      "description": "Moving arrows show which way power is flowing; thicker arrows mean more power. Battery flows of $battery_noise_w W or less and grid flows under 30 W are hidden as measurement noise. Arrows into the inverter from the grid mean buying, out to the grid mean selling.",
       "targets": [
         {
           "datasource": {
@@ -148,7 +159,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(abs((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)))) or on() vector(NaN)",
+          "expr": "(abs((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)))) or on() vector(NaN)",
           "legendFormat": "Battery",
           "refId": "D",
           "range": false,
@@ -214,7 +225,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "((sqrt(clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))) or on() vector(0)",
+          "expr": "((sqrt(clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)), 0)) + 15 * (clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Charging",
           "refId": "J",
           "range": false,
@@ -225,7 +236,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "((sqrt(clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)) + 15 * (clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0) > bool 20))) or on() vector(0)",
+          "expr": "((sqrt(clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)), 0)) + 15 * (clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)), 0) > bool 20))) or on() vector(0)",
           "legendFormat": "Discharging",
           "refId": "K",
           "range": false,
@@ -1152,7 +1163,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)",
+          "expr": "clamp_min(-(foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)), 0)",
           "legendFormat": "Charging",
           "refId": "A",
           "range": false,
@@ -1163,7 +1174,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool 80)), 0)",
+          "expr": "clamp_min((foxess_battery_power_watts * (abs(foxess_battery_power_watts) > bool $battery_noise_w)), 0)",
           "legendFormat": "Powering home",
           "refId": "B",
           "range": false,
